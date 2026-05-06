@@ -18,14 +18,70 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # --- KONFIGURACJA LINKÓW DO OBRAZKÓW ---
-IMG_ALERT = "https://media.discordapp.net/attachments/1501607488888242256/1501614691896660119/fc1139e4-b133-4dc2-a427-162457a01d95.png?ex=69fcb729&is=69fb65a9&hm=da93300966dacedb0bf51c1bf652fd14e517e54b75632c34699763207e24a69b&=&format=webp&quality=lossless&width=688&height=344"
-IMG_WELCOME = "https://media.discordapp.net/attachments/1501607488888242256/1501618320804417617/7b93b868-fac4-4fa4-9850-f23e952874f4.png?ex=69fcba8a&is=69fb690a&hm=93c9f2f0a7b5e550cb4ca2f78e45a0e1bcfc7dea70a0e3074cc9c471b67b2360&=&format=webp&quality=lossless&width=656&height=438"
-IMG_RULES = "https://media.discordapp.net/attachments/1501607488888242256/1501618531056488448/bddd02eb-307e-47f6-91ed-eddd1a9b2713.png?ex=69fcbabc&is=69fb693c&hm=1d51ad13bcba9114c03eaf7b170a7a42a53b81893692b390b0beb20db0a4d158&=&format=webp&quality=lossless&width=1230&height=820"
+IMG_ALERT = "https://media.discordapp.net/attachments/1501607488888242256/1501614691896660119/fc1139e4-b133-4dc2-a427-162457a01d95.png"
+IMG_WELCOME = "https://media.discordapp.net/attachments/1501607488888242256/1501618320804417617/7b93b868-fac4-4fa4-9850-f23e952874f4.png"
+IMG_RULES = "https://media.discordapp.net/attachments/1501607488888242256/1501618531056488448/bddd02eb-307e-47f6-91ed-eddd1a9b2713.png"
 
-# --- USTAWIENIA AUTOWIADOMOŚCI ---
-auto_msg_settings = {"text": "Wiadomość automatyczna", "hour": 13, "minute": 0, "channel_id": None, "last_sent": None}
+COLORS = {
+    "red": discord.Color.red(),
+    "blue": discord.Color.blue(),
+    "green": discord.Color.green(),
+    "yellow": discord.Color.yellow(),
+    "purple": discord.Color.purple(),
+    "gold": discord.Color.gold(),
+    "white": 0xFFFFFF,
+    "black": 0x000000
+}
 
-# Funkcja pomocnicza do wysyłania obrazka z linku jako pliku
+# --- ROZBUDOWANA KOMENDA EMBED ---
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def embed(ctx, kolor: str = "blue"):
+    # Usuwamy komendę wywołującą
+    await ctx.message.delete()
+    
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+
+    try:
+        # Pytamy o Tytuł
+        q1 = await ctx.send("📝 **Podaj TYTUŁ embedu:** (lub wpisz `brak`)", delete_after=60)
+        msg_title = await bot.wait_for('message', check=check, timeout=60.0)
+        title = msg_title.content if msg_title.content.lower() != 'brak' else None
+        await msg_title.delete()
+        await q1.delete()
+
+        # Pytamy o Opis
+        q2 = await ctx.send("📖 **Podaj TREŚĆ (opis) embedu:**", delete_after=60)
+        msg_desc = await bot.wait_for('message', check=check, timeout=60.0)
+        desc = msg_desc.content
+        await msg_desc.delete()
+        await q2.delete()
+
+        # Pytamy o duży obrazek (Link)
+        q3 = await ctx.send("🖼️ **Podaj LINK do dużego obrazka:** (lub wpisz `brak`)", delete_after=60)
+        msg_img = await bot.wait_for('message', check=check, timeout=60.0)
+        img_url = msg_img.content if msg_img.content.lower() != 'brak' else None
+        await msg_img.delete()
+        await q3.delete()
+
+        # Tworzenie Embedu
+        color = COLORS.get(kolor.lower(), discord.Color.blue())
+        full_embed = discord.Embed(title=title, description=desc, color=color)
+        
+        if img_url:
+            full_embed.set_image(url=img_url)
+            
+        full_embed.set_footer(text=f"Wysłane przez: {ctx.author.name}", icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+        full_embed.timestamp = datetime.datetime.now()
+        
+        await ctx.send(embed=full_embed)
+
+    except asyncio.TimeoutError:
+        await ctx.send("❌ Czas minął! Spróbuj ponownie wpisać `!embed`.", delete_after=10)
+
+# --- RESZTA FUNKCJI (POWITANIA, ANTY-LINK, ALERT) ---
+
 async def send_img_as_file(target, img_url, text=None):
     async with aiohttp.ClientSession() as session:
         async with session.get(img_url) as resp:
@@ -35,47 +91,27 @@ async def send_img_as_file(target, img_url, text=None):
                 if text: await target.send(text)
 
 @bot.event
-async def on_ready():
-    print(f'ZITBOT zalogowany!')
-    check_time_loop.start()
-
-# --- 1. SYSTEM ANTY-LINK (Anty-Spam) ---
-@bot.event
 async def on_message(message):
     if message.author.bot: return
-
-    # Szukamy linków w wiadomości
+    # Anty-Link
     if re.search(r'http[s]?://|discord\.gg/', message.content):
-        if not message.author.guild_permissions.manage_messages: # Admini mogą wysyłać linki
+        if not message.author.guild_permissions.manage_messages:
             await message.delete()
-            
-            # Dajemy przerwę (timeout) na 10 minut
             try:
                 duration = datetime.timedelta(minutes=10)
-                await message.author.timeout(duration, reason="Spamowanie linkami")
-            except: pass # Jeśli bot nie ma uprawnień do timeoutu
-
-            # Wysyłamy upomnienie w DM z obrazkiem "Zasady"
-            try:
-                await send_img_as_file(message.author, IMG_RULES, "Zostałeś wyciszony na 10 minut za wysyłanie linków. Przeczytaj zasady!")
+                await message.author.timeout(duration, reason="Linki")
+                await send_img_as_file(message.author, IMG_RULES, "Złamałeś zasady - nie wysyłaj linków!")
             except: pass
             return
-
     await bot.process_commands(message)
 
-# --- 2. POWITANIE W DM PO WEJŚCIU ---
 @bot.event
 async def on_member_join(member):
-    # Link do zaproszenia (możesz zmienić na stały link swojego serwera)
-    invite_link = "https://discord.gg/TWOJ-LINK" 
-    
+    # Powitanie w DM
     try:
-        # Wysyła obrazek i tekst w DM (prywatna wiadomość)
-        await send_img_as_file(member, IMG_WELCOME, f"Witamy w Gwardii! Baw się dobrze na naszym serwerze!\nLink do serwera: {invite_link}")
-    except:
-        print(f"Nie udało się wysłać DM do {member.name}")
+        await send_img_as_file(member, IMG_WELCOME, f"Witamy w Gwardii, **{member.name}**! Baw się dobrze.")
+    except: pass
 
-# --- KOMENDA ALERT (Zdjęcie i tekst osobno) ---
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def alert(ctx, *, message):
@@ -83,33 +119,6 @@ async def alert(ctx, *, message):
     await send_img_as_file(ctx, IMG_ALERT)
     await ctx.send(message)
 
-# --- SYSTEM AUTOWIADOMOŚCI ---
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def autowiad(ctx, czas: str, *, tresc: str):
-    try:
-        h, m = map(int, czas.split(':'))
-        auto_msg_settings.update({"hour": h, "minute": m, "text": tresc, "channel_id": ctx.channel.id})
-        await ctx.send(f"✅ Ustawiono autowiadomość o {czas}!")
-    except:
-        await ctx.send("❌ Użyj: `!autowiad 15:00 wiadomość`")
-
-@tasks.loop(seconds=30)
-async def check_time_loop():
-    now = datetime.datetime.now()
-    if now.hour == auto_msg_settings["hour"] and now.minute == auto_msg_settings["minute"]:
-        if auto_msg_settings["channel_id"] and auto_msg_settings["last_sent"] != now.date():
-            channel = bot.get_channel(auto_msg_settings["channel_id"])
-            if channel:
-                await send_img_as_file(channel, IMG_ALERT)
-                await channel.send(auto_msg_settings["text"])
-                auto_msg_settings["last_sent"] = now.date()
-
-# --- MODERACJA ---
-@bot.command()
-@commands.has_permissions(manage_messages=True)
-async def clear(ctx, amount: int):
-    await ctx.channel.purge(limit=amount + 1)
-
+# Uruchomienie bota
 if TOKEN:
     bot.run(TOKEN)
