@@ -16,7 +16,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # --- KONFIGURACJA ---
 # Wklej tutaj link do obrazka "OGŁOSZENIE"
-IMG_URL = "LINK_DO_TWOJEGO_OBRAZKA_TUTAJ"
+IMG_URL = "https://media.discordapp.net/attachments/1501607488888242256/1501614691896660119/fc1139e4-b133-4dc2-a427-162457a01d95.png?ex=69fcb729&is=69fb65a9&hm=da93300966dacedb0bf51c1bf652fd14e517e54b75632c34699763207e24a69b&=&format=webp&quality=lossless&width=688&height=344"
 
 auto_msg_settings = {
     "text": "To jest automatyczna wiadomość ZITBOT!",
